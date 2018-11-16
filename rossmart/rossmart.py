@@ -1,0 +1,362 @@
+#
+#   rossmart.py
+#
+#   This file should wrap the ROS SMART payrll API.
+#
+#   https://revenue-ie.github.io/paye-employers-documentation/
+#
+#   https://revenue-ie.github.io/paye-employers-documentation/rest/REST_Web_Service_Integration_Guide.pdf
+#
+#   https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html
+#
+import json
+import uuid
+import requests
+from urllib import urlencode
+import logging
+import md5
+import base64
+
+from requests_http_signature import HTTPSignatureHeaderAuth
+
+try:
+    import http.client as http_client
+except ImportError:
+    # Python 2
+    import httplib as http_client
+
+# Turn on low-level debugging
+# http_client.HTTPConnection.debuglevel = 1
+
+TEST_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
+LIVE_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
+
+logger = logging.getLogger(__name__)
+
+
+class RosSmartException(Exception):
+    """
+        Error connecting to ROS Smart API
+    """
+    message = None
+    status_code = None
+    payload = None
+    response = None
+    original_exception = None
+
+    def __init__(self, message=None, status_code=None, text=None, response=None, original_exception=None, payload=None):
+        self.message = message
+        self.status_code = status_code
+        self.response = response
+        self.payload = payload
+        self.text = text
+        self.original_exception = original_exception
+
+    def __str__(self):
+        return self.message
+
+
+class RosSmart:
+    public_key = None
+    private_key = None
+    hashed_password = None
+    url_root = False
+    agentTain = None
+
+    # Fixed parameters to REST requests - can be customised in subclass
+    softwareUsed = "internal"
+    softwareVersion = "1"
+
+    # I don't link camel-case, but I use it here for consistency with the ROS docs.
+    taxYear = None
+    employerRegistrationNumber = None
+
+    def __init__(self,
+            public_key_path=None,
+            private_key_path=None,
+            taxYear=None,                                  # Tax Year - 4 digit string
+            hashed_password=None,                          # Hashed password
+            password=None,                                 # Original Password
+            employerRegistrationNumber=None,               # Employers Reference Number
+            test_server=False):
+
+        self.taxYear = taxYear
+        self.employerRegistrationNumber = employerRegistrationNumber
+
+        if test_server:
+            self.url_root = TEST_ROOT
+        else:
+            self.url_root = LIVE_ROOT
+
+        if hashed_password:
+            self.hashed_password = hashed_password
+        else:
+            self.hashed_password = self.hash_password(password)
+
+        # Cannot run  algorithm="rsa-sha256" at the moment, no valid key.
+        with open(public_key_path) as fh:
+            public_key = []
+            for line in fh.readlines():
+                if line and not line.startswith('----'):
+                    public_key.append(line.strip())
+            self.public_key = ''.join(public_key)
+
+        with open(private_key_path) as fh:
+            self.private_key = fh.read()
+
+    # ---[ Utility Methods ]------------------------------------------
+
+    @classmethod
+    def hash_password(cls, original):
+        """
+            Covert plain-text password to hashed password.
+
+            The passwords use an transform before they can be used in the HTTPSignatureHeaderAuth mechanism.
+
+            Acording to Revenue...
+
+                The password provided is the plain text version.
+
+                To import to windows you would need the MD5 version in base64 encoding.
+
+                This is described in the "Appendix A - Extracting from a .p12 File" in either the REST or SOAP integreation guides.
+
+            From: Appendix A - Extracting from a .p12 File
+
+            The password on the P12 is not the same as the password entered by the customer. It is in fact the
+            MD5 hash of that password, followed by the Base64-encoding of the resultant bytes.
+
+            To calculate the hashed password, follow these steps:
+
+                1.  First get the bytes of the original password, assuming a "Latin-1" encoding. For the password
+                    "Password123", these bytes are: 80 97 115 115 119 111 114 100 49 50 51(i.e. the value of
+                    "P" is 80, "a" is 97, etc.).
+                2.  Then get the MD5 hash of these bytes. MD5 is a standard, public algorithm. Once again, for
+                    the password "Password123" these bytes work out as: 66 -9 73 -83 -25 -7 -31 -107 -65 71 95
+                    55 -92 76 -81 -53.
+                3.  Finally, create the new password by Base64-encoding the bytes from the previous step. For
+                    example, the password, "Password123" this is "QvdJref54ZW/R183pEyvyw==".
+        """
+        rv = base64.encodestring(md5.md5(original).digest())
+        return rv.replace('\n', '')
+
+    def handshake(self):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#tag/PAYE-Employers-Handshake-(Connection-Test)-REST-API
+
+            Test Connection
+        """
+        path = '/handshake'
+        qs = urlencode({
+            "employerRegistrationNumber": self.employerRegistrationNumber,
+            "softwareUsed": self.softwareUsed,
+            "softwareVersion": self.softwareVersion
+        })
+        return self._get(path + '?' + qs)
+
+    def mk_unique_id(self):
+        """
+            Generate a unique-id. This just uses uuid.
+        """
+        return str(uuid.uuid1())
+
+    # ---[ Low level GET/POST methods ]------------------------------------------
+
+    def _auth(self):
+
+        return HTTPSignatureHeaderAuth(
+            algorithm="rsa-sha512",
+            key=self.private_key,
+            passphrase=self.hashed_password,
+            key_id=self.public_key,
+            headers=["(request-target)", "host", "date"])
+
+    def _get(self, url, query_params=None):
+        """
+            Wrapper to perform HTTP GET
+            query_params is a list of tupples (param, value), so that names can repeat
+        """
+        url = self.url_root + url
+        qs = [("softwareUsed", self.softwareUsed), ("softwareVersion", self.softwareVersion)]
+        if self.agentTain:
+            qs.append(("agentTain", self.agentTain))
+        if query_params:
+            qs = qs + query_params
+        qs = urlencode(qs)
+        url = url + "?" + qs
+        resp = requests.get(url, auth=self._auth())
+        if not resp.ok:
+            logger.error("GET [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
+            logger.error("GET [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
+            raise RosSmartException(
+                message="GET [%s] failed, status_code [%s]" % (url, resp.status_code),
+                status_code=resp.status_code,
+                text=resp.text,
+                response=resp)
+        else:
+            logger.debug("GET [%s] ok=%s, status_code [%s], response [%s]" % (url, resp.ok, resp.status_code, resp.text))
+        return resp.json()
+
+    def _post(self, url, params, payload, query_params=None):
+        """
+            Wrapper to perform HTTP POST
+            query_params is a list of tupples (param, value), so that names can repeat
+        """
+        url = self.url_root + url
+        qs = [("softwareUsed", self.softwareUsed), ("softwareVersion", self.softwareVersion)]
+        if self.agentTain:
+            qs.append(("agentTain", self.agentTain))
+        if query_params:
+            qs = qs + query_params
+        qs = urlencode(qs)
+        url = url + "?" + qs
+        resp = requests.post(url, auth=self._auth(), data=json.dumps(payload))
+        if not resp.ok:
+            logger.error("POST [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
+            logger.error("POST [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
+            raise RosSmartException(
+                message="POST [%s] failed, status_code [%s]" % (url, resp.status_code),
+                status_code=resp.status_code,
+                text=resp.text,
+                payload=payload,
+                response=resp)
+        else:
+            logger.debug("POST [%s] ok=%s, status_code [%s], response [%s]" % (url, resp.ok, resp.status_code, resp.text))
+        return resp.json()
+
+    # ---[ Employers Payroll REST API ]------------------------------------------
+
+    def checkPayrollRunComplete(self, payrollRunReference):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/checkPayrollRunComplete
+        """
+        path = '/payroll/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference)
+        return self._get(path)
+
+    def checkPayrollSubmissionRequest(self, payrollRunReference, submissionID):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/checkPayrollSubmissionComplete
+        """
+        path = '/payroll/%s/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference, submissionID)
+        return self._get(path)
+
+    def createPayrollSubmission(self, payrollRunReference, submissionID, payslips, lineItemIDsToDelete=None):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
+        """
+        path = '/payroll/%s/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference, submissionID)
+        payload = {"payslips": payslips}
+        if lineItemIDsToDelete:
+            payload["lineItemIDsToDelete"] = lineItemIDsToDelete
+        return self._post(path, payload)
+
+    # ---[ Employers RPN REST API ]------------------------------------------
+
+    def lookUpRPNByEmployee(self, employeeId):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpRPNByEmployee
+            Request to get an RPN by Employee ID
+
+            employeeId:  (concatenation of PPSN and employment id)
+
+                    Employee's PPS Number(Used to identify the employee to which the RPN relates) and
+                    Employee's Employment ID e.g. {PPS_Number}-{Employment_ID}(Unique identifier for each distinct employment for an employee.
+                    If the RPN is being triggered as a result of the employee setting up the employment via Jobs and Pension
+                    or contacting Revenue, this field will not be populated e.g. {PPS_Number}-)
+        """
+        path = '/rpn/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, employeeId)
+        return self._get(path)
+
+    def lookUpRPNByEmployer(self, dateLastUpdated=None, employeeIDs=None):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpRPNByEmployer
+
+            Request to get an RPN by Employer Registration Number. Additionally
+
+            dateLastUpdated: string in YYYY-MM-DD format
+            employeeIDs: list of (concatenation of PPSN and employment id)
+
+                    Employee's PPS Number(Used to identify the employee to which the RPN relates) and
+                    Employee's Employment ID e.g. {PPS_Number}-{Employment_ID}(Unique identifier for each distinct employment for an employee.
+                    If the RPN is being triggered as a result of the employee setting up the employment via Jobs and Pension
+                    or contacting Revenue, this field will not be populated e.g. {PPS_Number}-)
+        """
+        path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
+        params = []
+        if dateLastUpdated:
+            params.append(("dateLastUpdated", dateLastUpdated))
+        if employeeIDs:
+            for ppsn in employeeIDs:
+                params.append(("employeeIDs", ppsn))
+
+        return self._get(path, query_params=params)
+
+    def createTemporaryRpn(self, employeeID, name, employmentStartDate=None, requestId=None):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
+
+            employeeID:          PPSN
+            name:                name (format RPNName)
+            employmentStartDate: YYYY-MM-DD
+        """
+        path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
+        payload = {
+            "requestId": requestId or self.mk_unique_id(),
+            "newEmployeeDetails": {
+                "employeeID": employeeID,
+                "name": name,
+            }
+        }
+        if employmentStartDate:
+            payload["newEmployeeDetails"]["employmentStartDate"] = employmentStartDate
+        return self._post(path, payload)
+
+    # ---[ PERIOD RETURN REST API ]------------------------------------------
+
+    def lookUpPayrollReturnByPeriod(self, periodStartDate, periodEndDate):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpPayrollReturnByPeriod
+            Look up payroll by returns period based on a range of dates.
+        """
+        path = '/returns_reconciliation/%s' % (self.employerRegistrationNumber)
+        params = [("periodStartDate", periodStartDate), ("periodEndDate", periodEndDate)]
+        return self._get(path, query_params=params)
+
+
+if __name__ == '__main__':
+    # Test Configuration is retrieved fom.
+    # https://softwaretest.ros.ie/paye-employers-self-service/dashboard
+    # Warning: this changed while I was developing my application.
+
+    # Current  basic test configuration. Retrieved from dashboard
+    from pprint import pprint
+
+    test_employees = [{"firstName": "Joan", "surName": "Turner_TEST", "ppsn": "7009613EA"}]
+    test_employerRegistrationNumber = "8000278TH"
+    test_taxYear = "2018"
+    password = "997ed2e8"
+    public_key_path = "testset2/public_key"
+    private_key_path = "testset2/private_key"
+
+    try:
+        rossmart = RosSmart(
+            public_key_path=public_key_path,
+            private_key_path=private_key_path,
+            password=password,
+            taxYear=test_taxYear,
+            employerRegistrationNumber=test_employerRegistrationNumber)
+
+        print("\n\nHandshaking to verify the connection")
+        pprint(rossmart.handshake())
+
+        print("\n\nRetrieve RPN for demo employee")
+        pprint(rossmart.lookUpRPNByEmployee('7009613EA-0'))
+
+        print("\n\nRetrieve RPN for all employees")
+        pprint(rossmart.lookUpRPNByEmployer())
+
+    except RosSmartException as e:
+        print(e)
+        if e.text:
+            print(e.text)
+
