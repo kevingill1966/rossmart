@@ -19,12 +19,12 @@ import base64
 
 from requests_http_signature import HTTPSignatureHeaderAuth
 
-try:
-    import http.client as http_client
-except ImportError:
-    # Python 2
-    import httplib as http_client
-
+# try:
+#     import http.client as http_client
+# except ImportError:
+#     # Python 2
+#     import httplib as http_client
+#
 # Turn on low-level debugging
 # http_client.HTTPConnection.debuglevel = 1
 
@@ -361,42 +361,3 @@ class RosSmart:
         else:
             logger.debug("POST [%s] ok=%s, status_code [%s], response [%s]" % (url, resp.ok, resp.status_code, resp.text))
         return resp.json()
-
-
-if __name__ == '__main__':
-    # Test Configuration is retrieved fom.
-    # https://softwaretest.ros.ie/paye-employers-self-service/dashboard
-    # Warning: this changed while I was developing my application.
-
-    # Current  basic test configuration. Retrieved from dashboard
-    from pprint import pprint
-
-    test_employees = [{"firstName": "Joan", "surName": "Turner_TEST", "ppsn": "7009613EA"}]
-    test_employerRegistrationNumber = "8000278TH"
-    test_taxYear = "2018"
-    password = "997ed2e8"
-    public_key_path = "testset2/public_key"
-    private_key_path = "testset2/private_key"
-
-    try:
-        rossmart = RosSmart(
-            public_key_path=public_key_path,
-            private_key_path=private_key_path,
-            password=password,
-            taxYear=test_taxYear,
-            employerRegistrationNumber=test_employerRegistrationNumber)
-
-        print("\n\nHandshaking to verify the connection")
-        pprint(rossmart.handshake())
-
-        print("\n\nRetrieve RPN for demo employee")
-        pprint(rossmart.lookUpRPNByEmployee('7009613EA-0'))
-
-        print("\n\nRetrieve RPN for all employees")
-        pprint(rossmart.lookUpRPNByEmployer())
-
-    except RosSmartException as e:
-        print(e)
-        if e.text:
-            print(e.text)
-

@@ -42,7 +42,6 @@ I extracted the ENCRYPTED PRIVATE KEY as follows::
     Enter PEM pass phrase: LZsLV0mNAdVwWI7ZyJ0Z5A==
     Verifying - Enter PEM pass phrase: LZsLV0mNAdVwWI7ZyJ0Z5A==
 
-
 Verify your keys
 ----------------
 
@@ -66,69 +65,16 @@ correctly and will work.::
 
     rossmart.handshake()
 
-Test script in the footer of the rossmart.py file::
-
-    # Test Configuration is retrieved fom.
-    # https://softwaretest.ros.ie/paye-employers-self-service/dashboard
-    # Warning: this changed while I was developing my application.
-
-    # Current  basic test configuration. Retrieved from dashboard
-    from pprint import pprint
-
-    test_employees = [{"firstName": "Joan", "surName": "Turner_TEST", "ppsn": "7009613EA"}]
-    test_employerRegistrationNumber = "8000278TH"
-    test_taxYear = "2018"
-    password = "997ed2e8"
-    public_key_path = "testset2/public_key"
-    private_key_path = "testset2/private_key"
-
-    try:
-        rossmart = RosSmart(
-            public_key_path=public_key_path,
-            private_key_path=private_key_path,
-            password=password,
-            taxYear=test_taxYear,
-            employerRegistrationNumber=test_employerRegistrationNumber)
-
-        print("\n\nHandshaking to verify the connection")
-        pprint(rossmart.handshake())
-
-        print("\n\nRetrieve RPN for demo employee")
-        pprint(rossmart.lookUpRPNByEmployee('7009613EA-0'))
-
-        print("\n\nRetrieve RPN for all employees")
-        pprint(rossmart.lookUpRPNByEmployer())
-
-    except RosSmartException as e:
-        print(e)
-        if e.text:
-            print(e.text)
-
 API Documentation
 -----------------
 
-Create an instance of RosSmart. Parameters::
-
-    public_key_path: Path to your public key, extracted as per notes above
-    private_key_path: Path to your private key, extracted as per notes above
-    password: Password supplied for the key via the softwaretest.ros.ie site
-    taxYear: Tax year being applied
-    employerRegistrationNumber: Your employer id
-    test_service: Set to false to use live URLs - not published yet.
-    hashed_password: use hashed password instead of original password
-
-    The following class attributes can be overridden. These are passed on all
-    requests to the API.
-
-        agentTain = None
-        softwareUsed = "internal"
-        softwareVersion = "1"
-
-Use the python interpreter to list the API::
+Use the python interpreter to list the API documentation in docstrings::
 
     python
     >>> import rossmart
     >>> help(rossmart.RosSmart)
+
+See the test folder for a unit-test script.
 
 Troubleshooting
 ---------------
