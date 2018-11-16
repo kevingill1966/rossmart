@@ -1,0 +1,13 @@
+asn1crypto==0.24.0
+certifi==2018.10.15
+cffi==1.11.5
+chardet==3.0.4
+cryptography==2.3.1
+enum34==1.1.6
+idna==2.7
+ipaddress==1.0.22
+pycparser==2.19
+requests==2.20.0
+-e git+https://github.com/kevingill1966/requests-http-signature.git@be44d4f19fd21fdbb7904e314c7fa470b01f6a75#egg=requests_http_signature
+six==1.11.0
+urllib3==1.24
