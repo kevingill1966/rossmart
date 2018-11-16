@@ -1,7 +1,7 @@
 #
 #   rossmart.py
 #
-#   This file should wrap the ROS SMART payrll API.
+#   This file wraps the ROS SMART payrll API.
 #
 #   https://revenue-ie.github.io/paye-employers-documentation/
 #
@@ -57,17 +57,38 @@ class RosSmartException(Exception):
 
 
 class RosSmart:
+    """
+    Provide a wrapper for the ROS Smart API. (Ireland Revenue Services PAYE API).
+
+    Parameters:
+
+        public_key_path: Path to your public key, extracted as per notes above
+        private_key_path: Path to your private key, extracted as per notes above
+        password: Password supplied for the key via the softwaretest.ros.ie site
+        taxYear: Tax year being applied
+        employerRegistrationNumber: Your employer id
+        test_service: Set to false to use live URLs - not published yet.
+        hashed_password: use hashed password instead of original password
+
+    The following class attributes can be overridden in a subclass. These are passed on all
+    requests to the API.
+
+        agentTain = None
+        softwareUsed = "internal"
+        softwareVersion = "1"
+    """
+
     public_key = None
     private_key = None
     hashed_password = None
     url_root = False
-    agentTain = None
 
     # Fixed parameters to REST requests - can be customised in subclass
+    agentTain = None
     softwareUsed = "internal"
     softwareVersion = "1"
 
-    # I don't link camel-case, but I use it here for consistency with the ROS docs.
+    # I don't like camel-case, but I use it here for consistency with the ROS docs.
     taxYear = None
     employerRegistrationNumber = None
 
@@ -103,6 +124,128 @@ class RosSmart:
 
         with open(private_key_path) as fh:
             self.private_key = fh.read()
+
+    # ---[ Connection Test ]------------------------------------------
+
+    def handshake(self):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#tag/PAYE-Employers-Handshake-(Connection-Test)-REST-API
+
+            Employer's PAYE Handshake Request.
+        """
+        path = '/handshake'
+        qs = urlencode({
+            "employerRegistrationNumber": self.employerRegistrationNumber,
+            "softwareUsed": self.softwareUsed,
+            "softwareVersion": self.softwareVersion
+        })
+        return self._get(path + '?' + qs)
+
+    # ---[ Employers Payroll REST API ]------------------------------------------
+
+    def checkPayrollRunComplete(self, payrollRunReference):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/checkPayrollRunComplete
+
+            Request to check the current status of an Employer's PAYE Payroll Run, based on the RunReference.
+        """
+        path = '/payroll/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference)
+        return self._get(path)
+
+    def checkPayrollSubmissionRequest(self, payrollRunReference, submissionID):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/checkPayrollSubmissionComplete
+
+            Request to check the current status of an Employer's PAYE Payroll Submission, based on the Submission ID.
+        """
+        path = '/payroll/%s/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference, submissionID)
+        return self._get(path)
+
+    def createPayrollSubmission(self, payrollRunReference, submissionID, payslips, lineItemIDsToDelete=None):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
+
+            Employer's PAYE Payroll Submission Request.
+        """
+        path = '/payroll/%s/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference, submissionID)
+        payload = {"payslips": payslips}
+        if lineItemIDsToDelete:
+            payload["lineItemIDsToDelete"] = lineItemIDsToDelete
+        return self._post(path, payload)
+
+    # ---[ Employers RPN REST API ]------------------------------------------
+
+    def lookUpRPNByEmployee(self, employeeId):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpRPNByEmployee
+            Request to get an RPN by Employee ID
+
+            employeeId:  (concatenation of PPSN and employment id)
+
+                    Employee's PPS Number(Used to identify the employee to which the RPN relates) and
+                    Employee's Employment ID e.g. {PPS_Number}-{Employment_ID}(Unique identifier for each distinct employment for an employee.
+                    If the RPN is being triggered as a result of the employee setting up the employment via Jobs and Pension
+                    or contacting Revenue, this field will not be populated e.g. {PPS_Number}-)
+        """
+        path = '/rpn/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, employeeId)
+        return self._get(path)
+
+    def lookUpRPNByEmployer(self, dateLastUpdated=None, employeeIDs=None):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpRPNByEmployer
+
+            Request to get an RPN by Employer Registration Number. Additionally
+
+            dateLastUpdated: string in YYYY-MM-DD format
+            employeeIDs: list of (concatenation of PPSN and employment id)
+
+                    Employee's PPS Number(Used to identify the employee to which the RPN relates) and
+                    Employee's Employment ID e.g. {PPS_Number}-{Employment_ID}(Unique identifier for each distinct employment for an employee.
+                    If the RPN is being triggered as a result of the employee setting up the employment via Jobs and Pension
+                    or contacting Revenue, this field will not be populated e.g. {PPS_Number}-)
+        """
+        path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
+        params = []
+        if dateLastUpdated:
+            params.append(("dateLastUpdated", dateLastUpdated))
+        if employeeIDs:
+            for ppsn in employeeIDs:
+                params.append(("employeeIDs", ppsn))
+
+        return self._get(path, query_params=params)
+
+    def createTemporaryRpn(self, employeeID, name, employmentStartDate=None, requestId=None):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
+
+            Create new RPN.
+
+            employeeID:          PPSN
+            name:                name (format RPNName)
+            employmentStartDate: YYYY-MM-DD
+        """
+        path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
+        payload = {
+            "requestId": requestId or self.mk_unique_id(),
+            "newEmployeeDetails": {
+                "employeeID": employeeID,
+                "name": name,
+            }
+        }
+        if employmentStartDate:
+            payload["newEmployeeDetails"]["employmentStartDate"] = employmentStartDate
+        return self._post(path, payload)
+
+    # ---[ PERIOD RETURN REST API ]------------------------------------------
+
+    def lookUpPayrollReturnByPeriod(self, periodStartDate, periodEndDate):
+        """
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpPayrollReturnByPeriod
+            Look up payroll by returns period based on a range of dates.
+        """
+        path = '/returns_reconciliation/%s' % (self.employerRegistrationNumber)
+        params = [("periodStartDate", periodStartDate), ("periodEndDate", periodEndDate)]
+        return self._get(path, query_params=params)
 
     # ---[ Utility Methods ]------------------------------------------
 
@@ -140,20 +283,6 @@ class RosSmart:
         rv = base64.encodestring(md5.md5(original).digest())
         return rv.replace('\n', '')
 
-    def handshake(self):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#tag/PAYE-Employers-Handshake-(Connection-Test)-REST-API
-
-            Test Connection
-        """
-        path = '/handshake'
-        qs = urlencode({
-            "employerRegistrationNumber": self.employerRegistrationNumber,
-            "softwareUsed": self.softwareUsed,
-            "softwareVersion": self.softwareVersion
-        })
-        return self._get(path + '?' + qs)
-
     def mk_unique_id(self):
         """
             Generate a unique-id. This just uses uuid.
@@ -163,6 +292,15 @@ class RosSmart:
     # ---[ Low level GET/POST methods ]------------------------------------------
 
     def _auth(self):
+        """
+            The signing mechanism uses protocol called: "The 'Signature' HTTP Header".
+
+            https://revenue-ie.github.io/paye-employers-documentation/rest/REST_Web_Service_Integration_Guide.pdf
+
+            Luckily, there is a Python module for handling it.
+
+            https://github.com/kislyuk/requests-http-signature
+        """
 
         return HTTPSignatureHeaderAuth(
             algorithm="rsa-sha512",
@@ -223,104 +361,6 @@ class RosSmart:
         else:
             logger.debug("POST [%s] ok=%s, status_code [%s], response [%s]" % (url, resp.ok, resp.status_code, resp.text))
         return resp.json()
-
-    # ---[ Employers Payroll REST API ]------------------------------------------
-
-    def checkPayrollRunComplete(self, payrollRunReference):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/checkPayrollRunComplete
-        """
-        path = '/payroll/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference)
-        return self._get(path)
-
-    def checkPayrollSubmissionRequest(self, payrollRunReference, submissionID):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/checkPayrollSubmissionComplete
-        """
-        path = '/payroll/%s/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference, submissionID)
-        return self._get(path)
-
-    def createPayrollSubmission(self, payrollRunReference, submissionID, payslips, lineItemIDsToDelete=None):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
-        """
-        path = '/payroll/%s/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, payrollRunReference, submissionID)
-        payload = {"payslips": payslips}
-        if lineItemIDsToDelete:
-            payload["lineItemIDsToDelete"] = lineItemIDsToDelete
-        return self._post(path, payload)
-
-    # ---[ Employers RPN REST API ]------------------------------------------
-
-    def lookUpRPNByEmployee(self, employeeId):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpRPNByEmployee
-            Request to get an RPN by Employee ID
-
-            employeeId:  (concatenation of PPSN and employment id)
-
-                    Employee's PPS Number(Used to identify the employee to which the RPN relates) and
-                    Employee's Employment ID e.g. {PPS_Number}-{Employment_ID}(Unique identifier for each distinct employment for an employee.
-                    If the RPN is being triggered as a result of the employee setting up the employment via Jobs and Pension
-                    or contacting Revenue, this field will not be populated e.g. {PPS_Number}-)
-        """
-        path = '/rpn/%s/%s/%s' % (self.employerRegistrationNumber, self.taxYear, employeeId)
-        return self._get(path)
-
-    def lookUpRPNByEmployer(self, dateLastUpdated=None, employeeIDs=None):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpRPNByEmployer
-
-            Request to get an RPN by Employer Registration Number. Additionally
-
-            dateLastUpdated: string in YYYY-MM-DD format
-            employeeIDs: list of (concatenation of PPSN and employment id)
-
-                    Employee's PPS Number(Used to identify the employee to which the RPN relates) and
-                    Employee's Employment ID e.g. {PPS_Number}-{Employment_ID}(Unique identifier for each distinct employment for an employee.
-                    If the RPN is being triggered as a result of the employee setting up the employment via Jobs and Pension
-                    or contacting Revenue, this field will not be populated e.g. {PPS_Number}-)
-        """
-        path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
-        params = []
-        if dateLastUpdated:
-            params.append(("dateLastUpdated", dateLastUpdated))
-        if employeeIDs:
-            for ppsn in employeeIDs:
-                params.append(("employeeIDs", ppsn))
-
-        return self._get(path, query_params=params)
-
-    def createTemporaryRpn(self, employeeID, name, employmentStartDate=None, requestId=None):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
-
-            employeeID:          PPSN
-            name:                name (format RPNName)
-            employmentStartDate: YYYY-MM-DD
-        """
-        path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
-        payload = {
-            "requestId": requestId or self.mk_unique_id(),
-            "newEmployeeDetails": {
-                "employeeID": employeeID,
-                "name": name,
-            }
-        }
-        if employmentStartDate:
-            payload["newEmployeeDetails"]["employmentStartDate"] = employmentStartDate
-        return self._post(path, payload)
-
-    # ---[ PERIOD RETURN REST API ]------------------------------------------
-
-    def lookUpPayrollReturnByPeriod(self, periodStartDate, periodEndDate):
-        """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/lookUpPayrollReturnByPeriod
-            Look up payroll by returns period based on a range of dates.
-        """
-        path = '/returns_reconciliation/%s' % (self.employerRegistrationNumber)
-        params = [("periodStartDate", periodStartDate), ("periodEndDate", periodEndDate)]
-        return self._get(path, query_params=params)
 
 
 if __name__ == '__main__':

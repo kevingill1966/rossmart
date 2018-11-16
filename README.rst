@@ -4,7 +4,7 @@ ROS SMART
 ROS is the Revenue Online System in Ireland. A new API has been developed for 2019.
 This module provides a low level Python wrapper for the API.
 
-Retreive your certificate.
+Retrieve your certificate.
 --------------------------
 
 This code has only been tested against the test environment. 
@@ -46,7 +46,7 @@ I extracted the ENCRYPTED PRIVATE KEY as follows::
 Verify your keys
 ----------------
 
-This "hanshaking" code will verify your keys have been extracted 
+This "handshaking" code will verify your keys have been extracted 
 correctly and will work.::
 
     import rossmart
@@ -103,3 +103,37 @@ Test script in the footer of the rossmart.py file::
         print(e)
         if e.text:
             print(e.text)
+
+API Documentation
+-----------------
+
+Create an instance of RosSmart. Parameters::
+
+    public_key_path: Path to your public key, extracted as per notes above
+    private_key_path: Path to your private key, extracted as per notes above
+    password: Password supplied for the key via the softwaretest.ros.ie site
+    taxYear: Tax year being applied
+    employerRegistrationNumber: Your employer id
+    test_service: Set to false to use live URLs - not published yet.
+    hashed_password: use hashed password instead of original password
+
+    The following class attributes can be overridden. These are passed on all
+    requests to the API.
+
+        agentTain = None
+        softwareUsed = "internal"
+        softwareVersion = "1"
+
+Use the python interpreter to list the API::
+
+    python
+    >>> import rossmart
+    >>> help(rossmart.RosSmart)
+
+Troubleshooting
+---------------
+
+The software uses the requests library. Turn on low-level debugging::
+
+    import http.client as http_client
+    http_client.HTTPConnection.debuglevel = 1
