@@ -4,6 +4,13 @@ ROS SMART
 ROS is the Revenue Online System in Ireland. A new API has been developed for 2019.
 This module provides a low level Python wrapper for the API.
 
+References
+----------
+
+    https://revenue-ie.github.io/paye-employers-documentation/
+
+    https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.json
+
 Retrieve your certificate.
 --------------------------
 

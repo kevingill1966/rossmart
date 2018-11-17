@@ -19,19 +19,20 @@ import base64
 
 from requests_http_signature import HTTPSignatureHeaderAuth
 
+# Turn on low-level debugging
+#
 # try:
 #     import http.client as http_client
 # except ImportError:
 #     # Python 2
 #     import httplib as http_client
 #
-# Turn on low-level debugging
 # http_client.HTTPConnection.debuglevel = 1
 
 TEST_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
 LIVE_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rossmart")
 
 
 class RosSmartException(Exception):
@@ -216,24 +217,24 @@ class RosSmart:
 
     def createTemporaryRpn(self, employeeID, name, employmentStartDate=None, requestId=None):
         """
-            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createPayrollSubmission
+            https://revenue-ie.github.io/paye-employers-documentation/rest/paye-employers-rest-api.html#operation/createTemporaryRpn
 
             Create new RPN.
 
-            employeeID:          PPSN
-            name:                name (format RPNName)
+            employeeID:          PPSN-{employment id}
+            name:                name {firstName: "", familyName: ""}
             employmentStartDate: YYYY-MM-DD
         """
         path = '/rpn/%s/%s' % (self.employerRegistrationNumber, self.taxYear)
         payload = {
             "requestId": requestId or self.mk_unique_id(),
-            "newEmployeeDetails": {
+            "newEmployeeDetails": [{
                 "employeeID": employeeID,
                 "name": name,
-            }
+            }]
         }
         if employmentStartDate:
-            payload["newEmployeeDetails"]["employmentStartDate"] = employmentStartDate
+            payload["newEmployeeDetails"][0]["employmentStartDate"] = employmentStartDate
         return self._post(path, payload)
 
     # ---[ PERIOD RETURN REST API ]------------------------------------------
@@ -335,7 +336,7 @@ class RosSmart:
             logger.debug("GET [%s] ok=%s, status_code [%s], response [%s]" % (url, resp.ok, resp.status_code, resp.text))
         return resp.json()
 
-    def _post(self, url, params, payload, query_params=None):
+    def _post(self, url, payload, query_params=None):
         """
             Wrapper to perform HTTP POST
             query_params is a list of tupples (param, value), so that names can repeat
@@ -347,11 +348,11 @@ class RosSmart:
         if query_params:
             qs = qs + query_params
         qs = urlencode(qs)
+        headers = {"Content-Type": "application/json;charset=UTF-8"}
         url = url + "?" + qs
-        resp = requests.post(url, auth=self._auth(), data=json.dumps(payload))
+        resp = requests.post(url, auth=self._auth(), data=json.dumps(payload), headers=headers)
         if not resp.ok:
-            logger.error("POST [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
-            logger.error("POST [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
+            logger.error("POST [%s] failed, status_code [%s], response [%s], payload [%s]" % (url, resp.status_code, resp.text, payload))
             raise RosSmartException(
                 message="POST [%s] failed, status_code [%s]" % (url, resp.status_code),
                 status_code=resp.status_code,
