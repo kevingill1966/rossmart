@@ -16,6 +16,7 @@ from urllib import urlencode
 import logging
 import md5
 import base64
+import hashlib
 
 from requests_http_signature import HTTPSignatureHeaderAuth
 
@@ -292,7 +293,7 @@ class RosSmart:
 
     # ---[ Low level GET/POST methods ]------------------------------------------
 
-    def _auth(self):
+    def _auth(self, post=False):
         """
             The signing mechanism uses protocol called: "The 'Signature' HTTP Header".
 
@@ -302,13 +303,16 @@ class RosSmart:
 
             https://github.com/kislyuk/requests-http-signature
         """
+        headers=["(request-target)", "host", "date"]
+        if post:
+            headers.append('digest')
 
         return HTTPSignatureHeaderAuth(
             algorithm="rsa-sha512",
             key=self.private_key,
             passphrase=self.hashed_password,
             key_id=self.public_key,
-            headers=["(request-target)", "host", "date"])
+            headers=headers)
 
     def _get(self, url, query_params=None):
         """
@@ -349,8 +353,17 @@ class RosSmart:
             qs = qs + query_params
         qs = urlencode(qs)
         headers = {"Content-Type": "application/json;charset=UTF-8"}
+
+        # The 'Digest' HTTP header is created using the POST body/payload. The payload should be
+        # converted to a byte array, hashed using the SHA-512 algorithm and finally base64 encoded before
+        # adding it as a HTTP header.
+        data = json.dumps(payload)
+        digest = hashlib.sha512(data)
+        digest = base64.b64encode(digest.digest()).decode()
+        headers['Digest'] = digest
+
         url = url + "?" + qs
-        resp = requests.post(url, auth=self._auth(), data=json.dumps(payload), headers=headers)
+        resp = requests.post(url, auth=self._auth(post=True), data=data, headers=headers)
         if not resp.ok:
             logger.error("POST [%s] failed, status_code [%s], response [%s], payload [%s]" % (url, resp.status_code, resp.text, payload))
             raise RosSmartException(
