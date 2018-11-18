@@ -10,6 +10,6 @@ setup(
         "requests>=2.20.0"
         "requests-http-signature>=0.1.0",
         "cryptography>=2.3.1",
-        "flex>=6.13.2",
+        # "flex>=6.13.2",
     ],
 )
