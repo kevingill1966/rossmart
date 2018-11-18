@@ -20,15 +20,23 @@ import hashlib
 
 from requests_http_signature import HTTPSignatureHeaderAuth
 
-# Turn on low-level debugging
-#
-# try:
-#     import http.client as http_client
-# except ImportError:
-#     # Python 2
-#     import httplib as http_client
-#
-# http_client.HTTPConnection.debuglevel = 1
+
+def enable_lowlevel_trace(enable=True):
+    """
+        Turn on low-level debugging at the low-level http library.
+        This gives a printout of the headers and raw requests.
+    """
+    try:
+        import http.client as http_client
+    except ImportError:
+        # Python 2
+        import httplib as http_client
+
+    if enable:
+        http_client.HTTPConnection.debuglevel = 1
+    else:
+        http_client.HTTPConnection.debuglevel = 0
+
 
 TEST_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
 LIVE_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
@@ -56,6 +64,20 @@ class RosSmartException(Exception):
 
     def __str__(self):
         return self.message
+
+    def validation_errors(self, code):
+        """
+            The server has number of business level errors.
+            These are accessible directly so that the client can be simpler.
+
+            I cannot find the reference for these codes at the moment.
+        """
+        try:
+            j = self.response.json()
+            validationErrors = j['validationErrors']
+            return [err for err in validationErrors if err.get('code') == code]
+        except Exception:
+            return []
 
 
 class RosSmart:
@@ -94,6 +116,9 @@ class RosSmart:
     taxYear = None
     employerRegistrationNumber = None
 
+    # Used to make a simple API for errors
+    _last_response = None
+
     def __init__(self,
             public_key_path=None,
             private_key_path=None,
@@ -126,6 +151,22 @@ class RosSmart:
 
         with open(private_key_path) as fh:
             self.private_key = fh.read()
+
+    # ---- [ API Simplifications ]-----------------------------------------------------
+
+    def validation_errors(self, code):
+        """
+            The server has number of business level errors.
+            These are accessible directly from the last response so that the client can be simpler.
+
+            TODO: I cannot find the reference for these codes at the moment.
+        """
+        try:
+            j = self._last_response.json()
+            validationErrors = j['validationErrors']
+            return [err for err in validationErrors if err.get('code') == code]
+        except Exception:
+            return []
 
     # ---[ Connection Test ]------------------------------------------
 
@@ -319,6 +360,8 @@ class RosSmart:
             Wrapper to perform HTTP GET
             query_params is a list of tupples (param, value), so that names can repeat
         """
+        self._last_response = None
+
         url = self.url_root + url
         qs = [("softwareUsed", self.softwareUsed), ("softwareVersion", self.softwareVersion)]
         if self.agentTain:
@@ -327,7 +370,8 @@ class RosSmart:
             qs = qs + query_params
         qs = urlencode(qs)
         url = url + "?" + qs
-        resp = requests.get(url, auth=self._auth())
+
+        self._last_response = resp = requests.get(url, auth=self._auth())
         if not resp.ok:
             logger.error("GET [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
             logger.error("GET [%s] failed, status_code [%s], response [%s]" % (url, resp.status_code, resp.text))
@@ -345,6 +389,8 @@ class RosSmart:
             Wrapper to perform HTTP POST
             query_params is a list of tupples (param, value), so that names can repeat
         """
+        self._last_response = None
+
         url = self.url_root + url
         qs = [("softwareUsed", self.softwareUsed), ("softwareVersion", self.softwareVersion)]
         if self.agentTain:
@@ -363,7 +409,7 @@ class RosSmart:
         headers['Digest'] = digest
 
         url = url + "?" + qs
-        resp = requests.post(url, auth=self._auth(post=True), data=data, headers=headers)
+        self._last_response = resp = requests.post(url, auth=self._auth(post=True), data=data, headers=headers)
         if not resp.ok:
             logger.error("POST [%s] failed, status_code [%s], response [%s], payload [%s]" % (url, resp.status_code, resp.text, payload))
             raise RosSmartException(
