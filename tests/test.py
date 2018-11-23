@@ -2,6 +2,8 @@ import logging
 import unittest
 import rossmart
 from pprint import pprint
+import uuid
+import time
 
 # Configuration downloaded for my account. See README in testset2
 # unfortunately, the data gets wiped. Setting it up is non-trivial.
@@ -24,9 +26,12 @@ logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadNa
 # rossmart.enable_lowlevel_trace()
 
 UUID = 'ce46869c-eb06-11e8-898f-080027fe7ca7'
+RUNUUID = str(uuid.uuid1())
 
 
 class Tester(unittest.TestCase):
+
+    rpns = []
 
     def setUp(self):
         self.api = rossmart.RosSmart(
@@ -103,6 +108,8 @@ class Tester(unittest.TestCase):
 
         self.assertTrue(found)
 
+        self.__class__.rpns = response['rpns']
+
     def test_03_createTemporaryRpn(self):
         print("\n\nCreate RPN for unemployed employees")
 
@@ -143,6 +150,78 @@ class Tester(unittest.TestCase):
             duplicated = e.validation_errors("4001")
             pprint(duplicated)
             assert(duplicated)
+
+    def test_04_createSubmission(self):
+        print("\n\nCreating payroll submission")
+
+        rpn = None
+        for r in self.__class__.rpns:
+            if r["employeeID"]["employeePpsn"] == test_employees[0]['ppsn']:
+                rpn = r
+                break
+
+        self.assertTrue(rpn is not None)
+
+        # Compute taxes based on RPN
+        payDate = '2018-10-10'
+        grossPay = 1000.00
+        payForIncomeTax = 1000.00
+        incomeTaxPaid = 0                   # Total amount for employment
+        payForEmployeePRSI = 1000.00
+        payForEmployerPRSI = 1000.00
+
+        # prsiExempt = False
+        # prsiExemptionReason = "UNDER_16"
+        prsiClassDetails = [
+            {"prsiClass": "A1", "insurableWeeks": 1}
+        ]
+
+        employeePRSIPaid = 0.00
+        employerPRSIPaid = 0.00
+        payForUSC = 1000.00
+        uscStatus = rpn["uscStatus"]
+        uscPaid = 0
+
+        # If unknown PPSN need extra fields
+        # If no RPN extra fields (emergency tax)
+
+        row = {
+            "lineItemID": RUNUUID,
+            "employeeID": rpn['employeeID'],
+            "employerReference": "Y11111",
+            "name": rpn["name"],
+            "payFrequency": "WEEKLY",
+            "numberOfPayPeriods": 52,
+            "rpnNumber": rpn["rpnNumber"],
+
+            "payDate": payDate,
+            "grossPay": grossPay,
+            "payForIncomeTax": payForIncomeTax,
+            "incomeTaxPaid": incomeTaxPaid,
+            "payForEmployeePRSI": payForEmployeePRSI,
+            "payForEmployerPRSI": payForEmployerPRSI,
+            "prsiClassDetails": prsiClassDetails,
+            "employerPRSIPaid": employerPRSIPaid,
+            "employeePRSIPaid": employeePRSIPaid,
+            "payForUSC": payForUSC,
+            "uscStatus": uscStatus,
+            "uscPaid": uscPaid,
+        }
+
+        payslips = [row]
+
+        try:
+            self.api.createPayrollSubmission(payrollRunReference='2018-11-01', submissionID=RUNUUID, payslips=payslips)
+        except Exception as e:
+            print("Exception: createPayrollSubmission, %s" % e)
+
+        print("Checking submission status")
+        for i in range(10):
+            time.sleep(1)
+            self.api.checkPayrollSubmissionRequest(payrollRunReference='2018-11-01', submissionID=RUNUUID)
+
+        print("Checking payroll status")
+        self.api.checkPayrollRunComplete(payrollRunReference='2018-11-01')
 
 
 if __name__ == '__main__':
