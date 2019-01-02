@@ -414,7 +414,10 @@ class RosSmart:
         # converted to a byte array, hashed using the SHA-512 algorithm and finally base64 encoded before
         # adding it as a HTTP header.
         data = json.dumps(payload)
-        digest = hashlib.sha512(data)
+        if type(data) == str:
+            digest = hashlib.sha512(data.encode('utf-8'))
+        else:
+            digest = hashlib.sha512(data)
         digest = base64.b64encode(digest.digest()).decode()
         headers['Digest'] = digest
 
