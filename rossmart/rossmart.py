@@ -39,7 +39,7 @@ def enable_lowlevel_trace(enable=True):
 
 
 TEST_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
-LIVE_ROOT = 'https://softwaretest.ros.ie/paye-employers/v1/rest'
+LIVE_ROOT = 'https://ros.ie/paye-employers/v1/rest'
 
 logger = logging.getLogger("rossmart")
 

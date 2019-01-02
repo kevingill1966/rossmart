@@ -58,19 +58,19 @@ correctly and will work.::
     import rossmart
 
     test_employerRegistrationNumber = "8000278TH"
-    test_taxYear = "2018"
+    test_taxYear = "2019"
     password = "997ed2e8"
     public_key_path = "testset2/public_key"
     private_key_path = "testset2/private_key"
 
-    rossmart = RosSmart(
+    connection = rossmart.RosSmart(
         public_key_path=public_key_path,
         private_key_path=private_key_path,
         password=password,
         taxYear=test_taxYear,
         employerRegistrationNumber=test_employerRegistrationNumber)
 
-    rossmart.handshake()
+    connection.handshake()
 
 API Documentation
 -----------------

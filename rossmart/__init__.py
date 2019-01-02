@@ -1,1 +1,1 @@
-from rossmart import RosSmart, RosSmartException
+from .rossmart import RosSmart, RosSmartException
