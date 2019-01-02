@@ -12,9 +12,16 @@
 import json
 import uuid
 import requests
-from urllib import urlencode
+try:
+    from urllib import urlencode
+except:
+    from urllib.parse import urlencode
+
 import logging
-import md5
+try:
+    from md5 import md5
+except:
+    from hashlib import md5
 import base64
 import hashlib
 
@@ -142,14 +149,14 @@ class RosSmart:
             self.hashed_password = self.hash_password(password)
 
         # Cannot run  algorithm="rsa-sha256" at the moment, no valid key.
-        with open(public_key_path) as fh:
+        with open(public_key_path, 'rb') as fh:
             public_key = []
             for line in fh.readlines():
-                if line and not line.startswith('----'):
+                if line and not line.startswith(b'----'):
                     public_key.append(line.strip())
-            self.public_key = ''.join(public_key)
+            self.public_key = b''.join(public_key)
 
-        with open(private_key_path) as fh:
+        with open(private_key_path, 'rb') as fh:
             self.private_key = fh.read()
 
     # ---- [ API Simplifications ]-----------------------------------------------------
@@ -323,8 +330,11 @@ class RosSmart:
                 3.  Finally, create the new password by Base64-encoding the bytes from the previous step. For
                     example, the password, "Password123" this is "QvdJref54ZW/R183pEyvyw==".
         """
-        rv = base64.encodestring(md5.md5(original).digest())
-        return rv.replace('\n', '')
+        rv = base64.encodestring(md5(original.encode('utf-8')).digest())
+        if type(rv) == bytes:
+            return rv.replace(b'\n', b'')
+        else:
+            return rv.replace('\n', '')
 
     def mk_unique_id(self):
         """
@@ -352,7 +362,7 @@ class RosSmart:
             algorithm="rsa-sha512",
             key=self.private_key,
             passphrase=self.hashed_password,
-            key_id=self.public_key,
+            key_id=self.public_key.decode('utf-8'),
             headers=headers)
 
     def _get(self, url, query_params=None):
