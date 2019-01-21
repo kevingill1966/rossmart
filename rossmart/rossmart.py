@@ -433,7 +433,7 @@ class RosSmart:
         url = url + "?" + qs
         self._last_response = resp = requests.post(url, auth=self._auth(post=True), data=data, headers=headers)
         if not resp.ok:
-            logger.error("POST [%s] failed, status_code [%s], response [%s], payload [%s]" % (url, resp.status_code, resp.text, payload[:1000]))
+            logger.error("POST [%s] failed, status_code [%s], response [%s], payload [%s]" % (url, resp.status_code, resp.text, data[:1000]))
             raise RosSmartException(
                 message="POST [%s] failed, status_code [%s]" % (url, resp.status_code),
                 status_code=resp.status_code,
