@@ -7,17 +7,30 @@ import time
 
 # Configuration downloaded for my account. See README in testset2
 # unfortunately, the data gets wiped. Setting it up is non-trivial.
-test_employees = [{"firstName": "Joan", "surName": "Turner_TEST", "ppsn": "7009613EA"}]
-test_employerRegistrationNumber = "8000278TH"
+test_employees = [
+    { "firstName" : "Floy", "surName" : "West", "ppsn" : "7133542CA" },
+    { "firstName" : "Woodrow", "surName" : "Ondricka", "ppsn" : "7133544GA" },
+    { "firstName" : "Jeromy", "surName" : "Prosacco", "ppsn" : "7133575RA" },
+    { "firstName" : "Lorna", "surName" : "Beahan", "ppsn" : "7133576TA" },
+    { "firstName" : "Sherwood", "surName" : "Schuster", "ppsn" : "7133577VA" },
+    { "firstName" : "Mario", "surName" : "Blanda", "ppsn" : "7133578AA" },
+    { "firstName" : "Fay", "surName" : "Thompson", "ppsn" : "7133580KA" },
+    { "firstName" : "Kassandra", "surName" : "Stokes", "ppsn" : "7133534DA" },
+    { "firstName" : "Khalid", "surName" : "Zieme", "ppsn" : "7133656RA" },
+    { "firstName" : "Khalid", "surName" : "Labadie", "ppsn" : "7133536HA" }]
+test_employerRegistrationNumber = "8005184MH"
 test_taxYear = "2019"
-password = "997ed2e8"
-public_key_path = "testset2/public_key"
-private_key_path = "testset2/private_key"
+# password = "997ed2e8"
+# public_key_path = "testset2/public_key"
+# private_key_path = "testset2/private_key"
+password = "59cf89f1"
+public_key_path = "testcert3/public_key"
+private_key_path = "testcert3/private_key"
 
 # You have to create these in the web user interface
 unemployed_customer = {
-    "name": {"firstName": "Bins", "familyName": "Brent"},
-    "ppsn": "7064924JA"}
+    "name": {"firstName": "Jana", "familyName": "O'Hara"},
+    "ppsn": "7133683UA"}
 
 logging.basicConfig(level=logging.DEBUG, format='%(relativeCreated)6d %(threadName)s %(message)s')
 

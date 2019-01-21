@@ -12,6 +12,7 @@
 import json
 import uuid
 import requests
+import decimal
 try:
     from urllib import urlencode
 except:
@@ -26,6 +27,13 @@ import base64
 import hashlib
 
 from requests_http_signature import HTTPSignatureHeaderAuth
+
+
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        return super(DecimalEncoder, self).default(o)
 
 
 def enable_lowlevel_trace(enable=True):
@@ -413,7 +421,8 @@ class RosSmart:
         # The 'Digest' HTTP header is created using the POST body/payload. The payload should be
         # converted to a byte array, hashed using the SHA-512 algorithm and finally base64 encoded before
         # adding it as a HTTP header.
-        data = json.dumps(payload)
+        data = json.dumps(payload, sort_keys=True, indent=4, cls=DecimalEncoder)
+
         if type(data) == str:
             digest = hashlib.sha512(data.encode('utf-8'))
         else:
