@@ -434,12 +434,13 @@ class RosSmart:
         self._last_response = resp = requests.post(url, auth=self._auth(post=True), data=data, headers=headers)
         if not resp.ok:
             logger.error("POST [%s] failed, status_code [%s], response [%s], payload [%s]" % (url, resp.status_code, resp.text, data[:2000]))
-            raise RosSmartException(
-                message="POST [%s] failed, status_code [%s]" % (url, resp.status_code),
-                status_code=resp.status_code,
-                text=resp.text,
-                payload=payload,
-                response=resp)
+            if resp.status_code not in [400]:
+                raise RosSmartException(
+                    message="POST [%s] failed, status_code [%s]" % (url, resp.status_code),
+                    status_code=resp.status_code,
+                    text=resp.text,
+                    payload=payload,
+                    response=resp)
         else:
             logger.debug("POST [%s] ok=%s, status_code [%s], response [%s]" % (url, resp.ok, resp.status_code, resp.text))
         return resp.json()
